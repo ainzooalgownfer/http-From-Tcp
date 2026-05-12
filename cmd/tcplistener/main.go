@@ -1,7 +1,7 @@
 package main
 
 import (
-	"MODULE_NAME/internal/request"
+	"httpfromtcp/internal/request"
 	"fmt"
 	"log"
 	"net"
@@ -33,6 +33,9 @@ func main() {
 	r.Headers.Foreach(func(n,v string) {
 			fmt.Printf("- %s: %s\n",n,v)
 	})
+
+	fmt.Printf("Body: %s \n", string(r.Body))
+	
 
 		 }
  }

@@ -1,14 +1,17 @@
 package request
 
 import (
-	"MODULE_NAME/internal/headers"
 	"bytes"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"io"
+	"strconv"
 )
+
 type Request struct {
 	RequestLine RequestLine
 	Headers *headers.Headers
+	Body string
 	state parserState
 }
 
@@ -22,7 +25,8 @@ type parserState string
 const (
 	StateInit parserState = "init"
 	StateDone parserState = "done"
-	StateHeaders parserState = "Headers	"
+	StateBody parserState = "Body"
+	StateHeaders parserState = "Headers"
 	StateErr parserState = "Error"
 )
 
@@ -30,10 +34,24 @@ func (r *RequestLine) ValidHttp() bool {
 	return r.HttpVersion == "HTTP/1.1"
 }
 
+func getInt(headers *headers.Headers ,name string, defaultValue int) int {
+	valueStr , exists := headers.Get(name)
+	if !exists {
+		return defaultValue
+	}
+
+	value , err := strconv.Atoi(valueStr) 
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
 func newRequest() *Request{
 	return &Request{
 		state: StateInit,
 		Headers: headers.NewHeaders(),
+		Body: "",
 	}
 }
  var ERROR_BAD_START_LINE = fmt.Errorf("malformed request Line!")
@@ -96,7 +114,7 @@ outer :
 
 		read += n
 		if done{
-			r.state = StateDone
+			r.state = StateBody
 		}
 
 	 case StateInit:
@@ -111,6 +129,32 @@ outer :
 		r.RequestLine = *rl
 		read += n
 		r.state = StateHeaders
+
+	case StateBody:
+	length := getInt(r.Headers, "content-length", 0)
+	if length == 0 {
+		r.state = StateDone
+		break outer
+	}
+
+	toRead := length - len(r.Body)
+	if toRead <= 0 {
+		r.state = StateDone
+		break
+	}
+
+	if len(currentData) == 0 {
+		break outer 
+	}
+
+	remaining := min(toRead, len(currentData))
+
+	r.Body += string(currentData[:remaining])
+	read += remaining
+
+	if len(r.Body) == length {
+		r.state = StateDone
+	}
 
 	 case StateDone:
 		 break outer
@@ -130,44 +174,51 @@ func (r *Request) Error() bool {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request := newRequest()
-	buf := make([]byte, 1024)
-	bufLen := 0
+    request := newRequest()
+    buf := make([]byte, 1024)
+    bufLen := 0
 
-	for !request.done() && !request.Error() {
-		
-		n, err := reader.Read(buf[bufLen:])
-		if err != nil {
-			if err == io.EOF && bufLen > 0 {
-				// We might have data left to parse before closing
-				break 
-			}
-			return nil, err
-		}
+    for !request.done() && !request.Error() {
+        n, err := reader.Read(buf[bufLen:])
+        bufLen += n // Update buffer length immediately
 
-		bufLen += n
+		if n == 0 && err == nil {
+        return nil, fmt.Errorf("no progress from reader")
+    }
 
-		
-		readN, err := request.parse(buf[:bufLen])
-		if err != nil {
-			return nil, err
-		}
+  
+        if bufLen > 0 {
+            readN, parseErr := request.parse(buf[:bufLen])
+            if parseErr != nil {
+                return nil, parseErr
+            }
+            if readN > 0 {
+                copy(buf, buf[readN:bufLen])
+                bufLen -= readN
+            }
+        }
 
-		
-		if readN > 0 {
-			copy(buf, buf[readN:bufLen])
-			bufLen -= readN
-		}
+    
+        if err != nil {
+            if err == io.EOF {
+                if !request.done() {
+                    return nil, io.ErrUnexpectedEOF
+                }
+                break
+            }
+            return nil, err
+        }
 
-		
-		if bufLen == len(buf) {
-			return nil, fmt.Errorf("request header too large")
-		}
-	}
+        if bufLen == len(buf) {
+            return nil, fmt.Errorf("request header or body chunk too large")
+        }
+    }
 
-	if !request.done() {
-		return nil, fmt.Errorf("incomplete request")
-	}
+    if !request.done() {
+        return nil, fmt.Errorf("incomplete request")
+    }
 
-	return request, nil
+    return request, nil
 }
+
+// 2:20:00
