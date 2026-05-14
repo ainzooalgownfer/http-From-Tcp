@@ -7,6 +7,7 @@ import (
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -87,9 +88,47 @@ func main() {
 			w.WriteStatusLine(status)
 			w.WriteHeaders(*h)
 			w.WriteBody(body)
-
+			
+		case target == "/httpbin/html":
+	        		res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])
+            if err != nil {
+                body = respond500()
+                status = response.StatusInternalServerError
+                h.Replace("Content-length", fmt.Sprintf("%d", len(body)))
+                h.Replace("Content-type", "text/html")
+                w.WriteStatusLine(status)
+                w.WriteHeaders(*h)
+                w.WriteBody(body)
+                return
+            }
+            defer res.Body.Close()
+        
+            // Read the entire response body
+            fullBody, err := io.ReadAll(res.Body)
+            if err != nil {
+                body = respond500()
+                status = response.StatusInternalServerError
+                h.Replace("Content-length", fmt.Sprintf("%d", len(body)))
+                h.Replace("Content-type", "text/html")
+                w.WriteStatusLine(status)
+                w.WriteHeaders(*h)
+                w.WriteBody(body)
+                return
+            }
+        
+            // Wrap in HTML
+            htmlResponse := fmt.Sprintf("<html><body><pre>%s</pre></body></html>", fullBody)
+        
+            // Send regular HTTP response (no chunked, no trailers)
+            h.Delete("Content-length")
+            h.Set("Content-Type", "text/html")
+            h.Set("Content-Length", fmt.Sprintf("%d", len(htmlResponse)))
+            w.WriteStatusLine(response.StatusOk)
+            w.WriteHeaders(*h)
+            w.WriteBody([]byte(htmlResponse))
+            return
 		case strings.HasPrefix(target, "/httpbin/"):
-			res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])
+			res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])	
 			if err != nil {
 				body = respond500()
 				status = response.StatusInternalServerError
