@@ -7,6 +7,7 @@ import (
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
+	"httpfromtcp/cmd/middleware"
 	"io"
 	"log"
 	"net/http"
@@ -14,7 +15,9 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	
 )
+
 //# In WSL
 //ip addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}'
 
@@ -62,10 +65,17 @@ func respond200() []byte {
     <p>Your request was an absolute banger.</p>
   </body>
 </html>	`)
-}
+}	
+
+
+
+
+
+
 
 func main() {
-	s, err := server.Serve(port, server.Handler(func(w *response.Writer, req *request.Request) {
+
+	mainHandler := server.Handler(func(w *response.Writer, req *request.Request) {
 		h := response.GetDefaultHeaders(0)
 		body := respond200()
 		status := response.StatusOk
@@ -129,6 +139,7 @@ func main() {
             w.WriteHeaders(*h)
             w.WriteBody([]byte(htmlResponse))
             return
+
 		case strings.HasPrefix(target, "/httpbin/"):
 			res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])	
 			if err != nil {
@@ -146,7 +157,7 @@ func main() {
 			w.WriteStatusLine(response.StatusOk)
 			h.Delete("Content-length")
 			h.Set("transfer-encoding", "chunked")
-			h.Set("Content-Type", "text/plain")
+			h.Set("Content-Type", "text/html")
 			h.Set("Trailer", "X-Content-SHA256, X-Content-Length")
 
 			w.WriteHeaders(*h)
@@ -179,7 +190,8 @@ func main() {
 			w.WriteStatusLine(response.StatusOk)
 			w.WriteHeaders(*h)
 			w.WriteBody(f)
-
+		case target == "/panic":
+            panic("test panic")
 		default:
 			body = []byte("<html><body><h1>404 Not Found</h1></body></html>")
 			status = response.StatusNotFound
@@ -189,7 +201,13 @@ func main() {
 			w.WriteHeaders(*h)
 			w.WriteBody(body)
 		}
-	}))
+	})
+
+	finalhandler := middleware.Chain(mainHandler,
+									 middleware.Recovery,
+									 middleware.LoggingMiddleware,
+									 )	
+	s, err := server.Serve(port, finalhandler )
 
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
