@@ -199,8 +199,23 @@ func main() {
 			w.WriteStatusLine(response.StatusOk)
 			w.WriteHeaders(*h)
 			w.WriteBody(f)
+			
 		case target == "/panic":
             panic("test panic")
+
+		case target == "/echo":
+			//forgettttt the \n registred nurse
+			body = []byte(req.Body  + "\n")
+			status = response.StatusOk
+			h.Replace("Content-length", fmt.Sprintf("%d", len(body)))
+			h.Replace("Content-type", "text/html")
+			w.WriteStatusLine(status)
+			w.WriteHeaders(*h)
+			log.Printf("Body: %s", string(body))
+			w.WriteBody(body )
+
+	        return
+
 		default:
 			body = []byte("<html><body><h1>404 Not Found</h1></body></html>")
 			status = response.StatusNotFound

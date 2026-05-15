@@ -41,6 +41,7 @@ const (
 	
 }
 
+
 func NewWriter(writer io.Writer)  *Writer {
 	return  &Writer{writer: writer,
 					headersStore: headers.NewHeaders(),
