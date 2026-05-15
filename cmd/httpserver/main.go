@@ -1,12 +1,13 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
+	"httpfromtcp/cmd/middleware"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
-	"httpfromtcp/cmd/middleware"
 	"io"
 	"log"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	
+	"time"
 )
 
 //# In WSL
@@ -158,22 +159,19 @@ func main() {
 
 			fullBody := []byte{}
             data := make([]byte, 32)
-			for {
-        n, err := res.Body.Read(data)
-        if n > 0 {
-            fullBody = append(fullBody, data[:n]...)
-            // Write chunk header (size in hex)
-            w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
-            // Write chunk data
-            w.WriteBody(data[:n])
-            // Write chunk terminator
-            w.WriteBody([]byte("\r\n"))
+	    	for {
+             n, err := res.Body.Read(data)
+             if n > 0 {
+                fullBody = append(fullBody, data[:n]...)
+                w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+                w.WriteBody(data[:n])
+                w.WriteBody([]byte("\r\n"))
+              }
+              if err != nil {
+                break
+               }
         }
-        if err != nil {
-            break
-        }
-    }
-    
+        
 			//TODO: fixed a the chunked but...
 			//curl -v -D - http://localhost:42069/httpbin/stream/2
              w.WriteBody([]byte("0\r\n"))
@@ -224,11 +222,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
-	defer s.Close()
+
 	log.Println("Server started on port", port)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 	log.Println("Server gracefully stopped")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := s.Shutdown(ctx); err != nil {
+    log.Printf("Forced shutdown: %v", err)
+	} else {
+    log.Println("All connections finished, server stopped")
+	}
 }
