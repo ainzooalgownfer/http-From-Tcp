@@ -212,7 +212,7 @@ func main() {
 			w.WriteStatusLine(status)
 			w.WriteHeaders(*h)
 			log.Printf("Body: %s", string(body))
-			w.WriteBody(body )
+			w.WriteBody(body )																
 
 	        return
 
