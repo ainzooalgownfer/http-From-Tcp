@@ -36,11 +36,15 @@ const (
 
  type Writer struct {
 	writer io.Writer
+	headersStore *headers.Headers
+	wroteHeader bool
 	
 }
 
 func NewWriter(writer io.Writer)  *Writer {
-	return  &Writer{writer: writer}
+	return  &Writer{writer: writer,
+					headersStore: headers.NewHeaders(),
+				}
 }
 
     func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
@@ -56,8 +60,29 @@ func NewWriter(writer io.Writer)  *Writer {
 	return err
 	}
 
+func (w *Writer) SetHeader(key, value string) {
+    if w.wroteHeader {
+        return
+    }
+
+	if w.headersStore == nil {
+        w.headersStore = headers.NewHeaders()
+    }
+	
+    w.headersStore.Set(key, value)
+}
 	
 	func (w *Writer) WriteHeaders(h headers.Headers) error{
+		if w.wroteHeader {
+        	return nil
+    	}
+
+		 if w.headersStore != nil {
+      		  w.headersStore.Foreach(func(k, v string) {
+            h.Set(k, v)
+       		 })
+    	}
+
 		b := []byte{}
 	    h.Foreach(func(n, v string) {
 		b = fmt.Appendf(b, "%s: %s\r\n", n, v)
@@ -65,6 +90,10 @@ func NewWriter(writer io.Writer)  *Writer {
 	      })
 	     b = append(b, "\r\n"...)
 	     _ , err := w.writer.Write(b)
+
+		  if err == nil {
+        w.wroteHeader = true   
+   		}
 	    return err	
 	}
 

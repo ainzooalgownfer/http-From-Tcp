@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
@@ -10,14 +13,20 @@ import (
 
 type Middleware func(server.Handler) server.Handler
 
-func LoggingMiddleware(next server.Handler) server.Handler {
-		return func(w *response.Writer , req *request.Request) {
-			start := time.Now()
-			next(w,req)
-			log.Printf("%s %s - %v" , req.RequestLine.Method , 
-									req.RequestLine.RequestTarget,
-									time.Since(start))
-		}
+func Logging(next server.Handler) server.Handler {
+    return func(w *response.Writer, req *request.Request) {
+        start := time.Now()
+        reqID := generateID()
+		
+		w.SetHeader("X-Request-ID", reqID)
+        next(w, req)
+        
+        log.Printf("[%s] %s %s — %v",
+            reqID,
+            req.RequestLine.Method,
+            req.RequestLine.RequestTarget,
+            time.Since(start))
+    }
 }
 
 
@@ -45,5 +54,11 @@ func Chain(handler server.Handler, middlewares ...func(server.Handler) server.Ha
 	return  handler
 }
 
-
+func generateID() string {
+	bytes := make([]byte,16)
+	if _, err := rand.Read(bytes); err != nil {
+		return fmt.Sprintf("%d%x", time.Now().UnixNano(), time.Now().UnixNano())
+	}
+	return hex.EncodeToString(bytes)
+}
 

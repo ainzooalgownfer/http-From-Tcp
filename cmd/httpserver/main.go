@@ -68,11 +68,6 @@ func respond200() []byte {
 }	
 
 
-
-
-
-
-
 func main() {
 
 	mainHandler := server.Handler(func(w *response.Writer, req *request.Request) {
@@ -205,8 +200,9 @@ func main() {
 
 	finalhandler := middleware.Chain(mainHandler,
 									 middleware.Recovery,
-									 middleware.LoggingMiddleware,
+									 middleware.Logging,
 									 )	
+
 	s, err := server.Serve(port, finalhandler )
 
 	if err != nil {
