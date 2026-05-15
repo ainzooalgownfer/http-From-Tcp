@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
-	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
@@ -158,25 +157,42 @@ func main() {
 			w.WriteHeaders(*h)
 
 			fullBody := []byte{}
-
+            data := make([]byte, 32)
 			for {
-				data := make([]byte, 32)
-				n, err := res.Body.Read(data)
-				if err != nil {
-					break
-				}
-				fullBody = append(fullBody, data[:n]...)
-				w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
-				w.WriteBody(data[:n])
-				w.WriteBody([]byte("\r\n"))
-			}
-			w.WriteBody([]byte("0\r\n"))
-			trailer := headers.NewHeaders()
-			out := sha256.Sum256(fullBody)
-			trailer.Set("X-Content-SHA256", ToString(out[:]))
-			trailer.Set("X-Content-Length", fmt.Sprintf("%d", len(fullBody)))
-			w.WriteHeaders(*trailer)
-			return
+        n, err := res.Body.Read(data)
+        if n > 0 {
+            fullBody = append(fullBody, data[:n]...)
+            // Write chunk header (size in hex)
+            w.WriteBody([]byte(fmt.Sprintf("%x\r\n", n)))
+            // Write chunk data
+            w.WriteBody(data[:n])
+            // Write chunk terminator
+            w.WriteBody([]byte("\r\n"))
+        }
+        if err != nil {
+            break
+        }
+    }
+    
+			//TODO: fixed a the chunked but...
+			//curl -v -D - http://localhost:42069/httpbin/stream/2
+             w.WriteBody([]byte("0\r\n"))
+             
+         
+             out := sha256.Sum256(fullBody)
+             shaStr := ToString(out[:])
+             lenStr := fmt.Sprintf("%d", len(fullBody))
+             
+             
+             trailerBytes := []byte{}
+             trailerBytes = fmt.Appendf(trailerBytes, "X-Content-SHA256: %s\r\n", shaStr)
+             trailerBytes = fmt.Appendf(trailerBytes, "X-Content-Length: %s\r\n", lenStr)
+             
+             
+             trailerBytes = append(trailerBytes, "\r\n"...)
+             
+             w.WriteBody(trailerBytes)
+             return
 
 		case target == "/video":
 			f, _ := os.ReadFile("assets/vim.mp4")

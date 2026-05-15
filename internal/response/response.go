@@ -68,7 +68,7 @@ func (w *Writer) SetHeader(key, value string) {
 	if w.headersStore == nil {
         w.headersStore = headers.NewHeaders()
     }
-	
+
     w.headersStore.Set(key, value)
 }
 	
@@ -105,3 +105,4 @@ func (w *Writer) SetHeader(key, value string) {
 		}
 		return n , err
 	}
+
